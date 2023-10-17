@@ -40,7 +40,6 @@
     basicstyle=\ttfamily, % Monospaced font
     keywordstyle=\color{blue}, % Keywords in blue
     commentstyle=\color{gray}, % Comments in gray
-    frame=single, % Draw a frame around the code
     numbers=left, % Line numbers on the left
     numberstyle=\tiny,
 }
@@ -112,7 +111,7 @@ This project is dedicated to the comprehensive study of two vulnerabilities that
 	For what regards the model layer instead, it defines two view functions that handle HTTP GET requests, and returns JSON responses. The view function for the \verb|extract|, receives a GET request with a query parameter \verb|lookup_name|. It then creates a new Experiment object in the database with specific \verb|start_datetime|, \verb|start_date|, \verb|end_datetime|, and \verb|end_date fields|. The code conditionally filters the Experiment objects based on the \verb|lookup_name| and extracts specific parts of the \verb|end_datetime|, such as the \verb|year|, \verb|month|, or \verb|day|, depending on the value of \verb|lookup_name|. \\ 
 	Similarly, the view function for the \verb|trunc| receives a GET request with a query parameter \verb|kind|. The code conditionally filters the Experiment objects based on the \verb|kind| and truncates the \verb|start_datetime| to the specified \verb|year|, \verb|month|, or \verb|day| depending on the value of \verb|kind|. This is where an SQL injection could take place. \\ \\
 	In order to verify that the injection succeed. In order to show that a potential SQL attack could be triggered, the following commands were executed:
-	\begin{lstlisting}[style=Bash]
+	\begin{lstlisting}[style=Bashstyle]
 curl "http://localhost:4131/extract/?lookup_name=year' FROM 
 start_datetime)) OR 1=1;SELECT PG_SLEEP(5)--" 
 
@@ -120,10 +119,19 @@ curl "http://localhost:4131/trunc/?kind=year', start_datetime))
  OR 1=1;SELECT PG_SLEEP(5)--"
 	\end{lstlisting}
 	After the execution of these commands we can see really see that \verb|PG_SLEEP| (Postgres function to pause the database's response), takes even more than 5 seconds to respond. Since arbitrary SQL statements can be executed, very dangerous attacks could take place, thanks to the fact the the input in not correctly sanitized.
+	Here you can see the code that has been added by the developers in order to fix the issue:
 	
 	\subsubsection{Mitigation}
 	 CVE-2022-34265 was mitigated in Django 3.2.14 and 4.0.6 by fixing the SQL injection vulnerability in the Trunc() and Extract() functions. The specific fix was to escape any untrusted data that is used in the \verb|kind| or \verb|lookup_name| argument of these functions. This means that even if an attacker is able to inject malicious SQL code into a request, it will be escaped and will not be executed by the database. \\ \\
 	  By checking the patch on \href{https://github.com/django/django/commit/0dc9c016fadb71a067e5a42be30164e3f96c0492}{git hub}, we can easily note that \verb|extract_trunc_lookup_pattern| variable is added to the code. This class variable defines a regular expression pattern used for extracting or truncating date and time values. It's compiled using \verb|lazy_re_compile|, which is a function that compiles regular expressions lazily, improving performance. In the patch there was added also a conditional instruction that checks if \verb|lookup_name| attribute instance matches the regular expression pattern \verb|extract_trunc_lookup_pattern|. \\  \\
+	  Here you can see the code that has been added by the developers in order to fix the issue:
+	  \begin{lstlisting}[style=Python]
+extract_trunc_lookup_pattern = _lazy_re_compile(r"[\w\-_()]+")
+if not connection.ops.extract_trunc_lookup_pattern.fullmatch(self.lookup_name):
+            raise ValueError("Invalid lookup_name: %s" % self.lookup_name)
+if not connection.ops.extract_trunc_lookup_pattern.fullmatch(self.kind):
+            raise ValueError("Invalid kind: %s" % self.kind)
+	\end{lstlisting}
 	  In addition to the official fix in Django, users can also mitigate the affected Django's versions, by constraining the \verb|lookup_name| and \verb|kind| choice to a known safe list and sanitizing all user input before using it in database queries.
 	  \newpage
 	\section{Cross-site scripting (XSS)}
@@ -158,8 +166,27 @@ The gravity of this vulnerability becomes evident when a privileged user, such a
 	\subsubsection{Mitigation}
 	CVE-2022-23988 is fixed by escaping all user input before it is displayed on the website. This means that any characters that could be interpreted as HTML code are converted to their corresponding character entities. \\
 	
-	This escaping is done using functions provided by the programming languages or framework that is being used to develop the website. In wordpress, a plugin is a PHP file with a WordPress plugin header comment. Looking at the source code on \href{https://github.com/WordPress/WordPress/commit/948a260e805f11709cd38bf305a3092070ec7f66}{git hub} we can see that developers changed the PHP escaping function, from \verb|e()| to \verb|esc_attr_e()|. The main difference between \verb|e()| and \verb|esc_attr_e()| is that \verb|esc_attr_e()| escapes all HTML special characters in the string that is passed to it, meanwhile \verb|e()| does not escape any HTML special character.
+	This escaping is done using functions provided by the programming languages or framework that is being used to develop the website. In wordpress, a plugin is a PHP file with a WordPress plugin header comment. Looking at the source code on \href{https://github.com/WordPress/WordPress/commit/948a260e805f11709cd38bf305a3092070ec7f66}{git hub} we can see that developers changed the PHP escaping function, from \verb|e()| to \verb|esc_attr_e()|. The main difference between \verb|e()| and \verb|esc_attr_e()| is that \verb|esc_attr_e()| escapes all HTML special characters in the string that is passed to it, meanwhile \verb|e()| does not escape any HTML special character. \\ \\
+	In addition, the community also developed a tool to help users identify and fix websites that are vulnerable to CVE-2022-23988, this is a plugin that scans websites and checks if the current version of plugins running is safe from known problems. \\
 	
-	In addition, the community also developed a tool to help users identify and fix websites that are vulnerable to CVE-2022-23988, this is a plugin that scans websites and checks if the current version of plugins running is safe from known problems. 
+	You can see in the following images, the vulnerable code which was using the \verb|e()| function in stead of \verb|esc_attr_e()|, and how it was fixed:
+	
+	\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=1\textwidth]{1} 
+	\end{figure} 
+	\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=1\textwidth]{2} 
+	\end{figure}
+	\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=1\textwidth]{3} 
+	\end{figure} 
+	
+	\newpage
+	 
+
+	
 
 \end{document}
